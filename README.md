@@ -29,6 +29,13 @@ Note: **Windows** and **macOS** users get _Docker Compose V2_.
 - At least 2.6 GiB of free RAM (not counting web browser)
 - If you want to try Elastic, count at least 2 GiB more of free RAM.
 
+## Script for basic setup
+```shell
+wget https://gitlab.com/LMSCloudPaulD/koha-testing-docker-lmscloud-devel/-/raw/master/setup.sh
+chmod +x setup.sh
+./setup.sh
+```
+
 ## Usage
 
 * First, fetch this project:
