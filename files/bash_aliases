@@ -1,5 +1,6 @@
 # lmscloud specific container
 alias ku-lms='cd "$KOHA_TESTING_DOCKER_HOME"; docker-compose -f docker-compose-lms.yml -p koha up --force-recreate'
+alias kul-lms='cd "$KOHA_TESTING_DOCKER_HOME"; docker compose -f docker-compose-lms-light.yml -p koha up --force-recreate'
 
 # community containers
 alias ku='cd "$KOHA_TESTING_DOCKER_HOME"; docker-compose -f docker-compose.yml -p koha up --force-recreate'
