@@ -8,6 +8,7 @@ services:
             MYSQL_DATABASE: koha_kohadev
             MYSQL_USER: koha_kohadev
             MYSQL_PASSWORD: password
+            MARIADB_ROOT_PASSWORD: password
         networks:
             - kohanet
     koha:
