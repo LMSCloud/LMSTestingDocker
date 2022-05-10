@@ -2,7 +2,8 @@
 FROM debian:bullseye
 
 # File Author / Maintainer
-LABEL maintainer="tomascohen@theke.io"
+# Author if this file is Tomás Cohen Arazi, modified by Paul Derscheid
+LABEL maintainer="paul.derscheid@lmscloud.de"
 
 ENV PATH /usr/bin:/bin:/usr/sbin:/sbin
 ENV DEBIAN_FRONTEND noninteractive
