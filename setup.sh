@@ -1,5 +1,11 @@
 #!/bin/sh
 
+set -e
+
+if [[ $(whoami) == 'root' ]]; then
+    echo "Don't run this as root!" && exit
+fi
+
 mkdir -p ~/git && cd ~/git
 
 echo '##### Fetching koha-testing-docker... #####'
@@ -8,7 +14,7 @@ git clone https://gitlab.com/LMSCloudPaulD/koha-testing-docker-lmscloud-devel.gi
 echo '##### Fetching kohaclone... #####'
 git clone https://gitlab.com/koha-community/Koha.git && echo '##### Fetching complete! Renaming ... #####'
 
-if [[ ${pwd} == /home/${USER}/git && -d Koha ]]; then
+if [[ $(pwd) == /home/${USER}/git && -d Koha ]]; then
     mv Koha kohaclone
 else
     echo '##### Wrong working directory! Switching.. #####'
@@ -28,6 +34,13 @@ cat << EOF >> /home/${USER}/.bashrc
 export SYNC_REPO="/home/${USER}/git/kohaclone"
 export LOCAL_USER_ID=$(id -u)
 export KOHA_TESTING_DOCKER_HOME=${KOHA_TESTING_DOCKER_HOME}
+if ! command -v lscpu &> /dev/null; then
+    if [[ $(sysctl -a | grep machdep.cpu | awk 'FNR == 1 {print $2 " " $3}') == "Apple M1" ]]; then
+        export ARCHITECTURE="aarch64"
+    fi
+else
+    export ARCHITECTURE=$(lscpu | awk 'FNR == 1 {print $2}')
+fi
 source ${KOHA_TESTING_DOCKER_HOME}/files/bash_aliases
 EOF
 echo '##### Done! #####'

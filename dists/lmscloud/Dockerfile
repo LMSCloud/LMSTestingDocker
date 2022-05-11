@@ -1,5 +1,7 @@
-# Base it on Debian 10
-FROM debian:bullseye
+ARG arch
+
+# Base it on Debian 11
+FROM debian:bullseye AS base
 
 # File Author / Maintainer
 # Author if this file is Tomás Cohen Arazi, modified by Paul Derscheid
@@ -92,6 +94,7 @@ RUN apt-cache policy libyaml-libyaml-perl
 RUN mkdir /kohadevbox
 WORKDIR /kohadevbox
 
+FROM base AS branch-aarch64
 COPY arm_dependencies /kohadevbox/arm_dependencies
 
 RUN for f in arm_dependencies/*; do gdebi "$f" -n; done
@@ -106,7 +109,11 @@ RUN perl Makefile.PL \
 
 WORKDIR /kohadevbox
 
+FROM base AS branch-x86_64
+FROM branch-${arch} AS final
+
 COPY koha-common_21.05.14lmscloud-1_all.deb /kohadevbox/
+
 # Install koha-common
 RUN gdebi koha-common_21.05.14lmscloud-1_all.deb -n \
    && /etc/init.d/koha-common stop \
@@ -189,9 +196,11 @@ COPY files/run.sh /kohadevbox
 COPY files/templates /kohadevbox/templates
 COPY env/defaults.env /kohadevbox/templates/defaults.env
 
+RUN echo ${ARCHITECTURE}
 CMD ["/bin/bash", "/kohadevbox/run.sh"]
 
 EXPOSE 8080 8081
+
 
 
 

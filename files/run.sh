@@ -171,13 +171,13 @@ if [ "${INSTALL_MISSING_FROM_CPANFILE}" = "yes" ]; then
     cpanm --skip-installed --installdeps ${BUILD_DIR}/koha/
 fi
 
-#TODO: Find out why this block doesn't work
-ARCHITECTURE=$(echo $(lscpu | awk 'FNR == 1 {print $2}'))
+echo 'Test Test Test Test Test Test Test Test'
 
-if [[ "${ARCHITECTURE}" == 'aarch64' ]]; then
+#TODO: Find out why this block doesn't work
+if [ ${ARCHITECTURE} == 'aarch64' ]; then
     cpanm JSON::Validator::Ref \
-        cpanm ExtUtils::MakeMaker \
-        JSON/Validator/OpenAPI/Mojolicious.pm -n;
+        ExtUtils::MakeMaker \
+        JSON::Validator::OpenAPI::Mojolicious.pm -n;
 fi
 
 # Stop apache2
