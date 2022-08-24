@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 mkdir -p arm_dependencies && mkdir arm_dependencies/libhttpd-bench-apachebench-perl
 
@@ -18,7 +18,7 @@ DEPENDENCIES=(
 )
 
 for i in "${DEPENDENCIES[@]}"; do
-    wget $i -P arm_dependencies/
+    wget "$i" -P arm_dependencies/
 done
 
 wget http://deb3.kohaaloha.com/ka/koha-deps/pool/bullseye/libh/libhttpd-bench-apachebench-perl/libhttpd-bench-apachebench-perl_0.73.orig.tar.gz -P arm_dependencies/libhttpd-bench-apachebench-perl

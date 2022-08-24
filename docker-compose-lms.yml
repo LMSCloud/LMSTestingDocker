@@ -11,11 +11,12 @@ services:
         networks:
             - kohanet
     es:
-        image: koha/elasticsearch-icu:6.x
+        image: koha/elasticsearch-icu:7.x
         environment:
             - cluster.name=docker-cluster
             - bootstrap.memory_lock=true
             - xpack.security.enabled=false
+            - discovery.type=single-node
             - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
         ulimits:
             memlock:

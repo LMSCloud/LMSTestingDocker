@@ -43,3 +43,8 @@ inc/
 *.sublime-workspace
 # VSCode
 .vstags
+
+# LMSCloud specific stuff
+*.sql
+dists/lmscloud/files/
+dists/lmscloud/env/

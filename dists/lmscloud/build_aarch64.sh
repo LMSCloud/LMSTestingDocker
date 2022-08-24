@@ -1,6 +1,6 @@
-#!/bin/sh
+#!/bin/bash
 
-cd ${KOHA_TESTING_DOCKER_HOME}
+cd "${KOHA_TESTING_DOCKER_HOME}" || exit 1
 
 echo 'Building image for aarch64'
 

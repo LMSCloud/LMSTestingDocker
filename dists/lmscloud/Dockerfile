@@ -13,7 +13,7 @@ ENV DEBIAN_FRONTEND noninteractive
 # Set suitable debian sources
 #RUN echo "deb http://httpredir.debian.org/debian bullseye main" > /etc/apt/sources.list
 
-ENV REFRESHED_AT 2021-06-17
+ENV REFRESHED_AT 2022-08-24
 
 #RUN apt-get -y update
 
@@ -57,6 +57,7 @@ RUN apt-get -y update \
 # Set locales
 RUN    echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen \
     && echo "fr_FR.UTF-8 UTF-8" >> /etc/locale.gen \
+    && echo "de_DE.UTF-8 UTF-8" >> /etc/locale.gen \
     && locale-gen \
     && dpkg-reconfigure locales \
     && /usr/sbin/update-locale LANG=en_US.UTF-8
@@ -77,10 +78,11 @@ RUN a2enmod rewrite \
 
 # Add Koha development repositories
 #RUN echo "deb http://debian.koha-community.org/koha-staging exp main" >> /etc/apt/sources.list.d/koha.list
-RUN echo "deb http://debian.koha-community.org/koha-staging dev main" >> /etc/apt/sources.list.d/koha.list
-RUN echo "deb http://deb3.kohaaloha.com/ka/koha-deps stable main bullseye" >> /etc/apt/sources.list.d/koha.list
+RUN echo "deb [signed-by=/usr/share/keyrings/koha-keyring.gpg] http://debian.koha-community.org/koha-staging dev main" >> /etc/apt/sources.list.d/koha.list
+RUN echo "deb [signed-by=/usr/share/keyrings/koha-deps-keyring.gpg] http://deb3.kohaaloha.com/ka/koha-deps stable main bullseye" >> /etc/apt/sources.list.d/koha.list
 
-RUN wget -q -O- http://debian.koha-community.org/koha/gpg.asc | apt-key add -
+RUN wget -qO - http://debian.koha-community.org/koha/gpg.asc | gpg --dearmor -o /usr/share/keyrings/koha-keyring.gpg
+RUN wget -qO - http://deb3.kohaaloha.com/ka/koha-deps/gpg.asc | gpg --dearmor -o /usr/share/keyrings/koha-deps-keyring.gpg
 RUN apt-get -y update
 
 RUN apt-cache policy koha-common
@@ -112,6 +114,7 @@ WORKDIR /kohadevbox
 FROM base AS branch-x86_64
 FROM branch-${arch} AS final
 
+# We need to add our lmscloud package instead of fetching from the community repo
 COPY koha-common_21.05.14lmscloud-1_all.deb /kohadevbox/
 
 # Install koha-common
@@ -134,6 +137,7 @@ RUN apt-get -y update \
          libdevel-cover-report-clover-perl \
          libwebservice-ils-perl \
          libselenium-remote-driver-perl \
+         libauth-googleauth-perl \
    && rm -rf /var/cache/apt/archives/* \
    && rm -rf /var/lib/api/lists/*
 

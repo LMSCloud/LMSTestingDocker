@@ -171,13 +171,18 @@ if [ "${INSTALL_MISSING_FROM_CPANFILE}" = "yes" ]; then
     cpanm --skip-installed --installdeps ${BUILD_DIR}/koha/
 fi
 
-echo 'Test Test Test Test Test Test Test Test'
+# Add the missing JSON::Validator
+cpanm JSON::Validator::Ref \
+    ExtUtils::MakeMaker \
+    JSON::Validator::OpenAPI::Mojolicious.pm -n;
 
-#TODO: Find out why this block doesn't work
-if [ ${ARCHITECTURE} == 'aarch64' ]; then
-    cpanm JSON::Validator::Ref \
-        ExtUtils::MakeMaker \
-        JSON::Validator::OpenAPI::Mojolicious.pm -n;
+
+if [ -f /usr/share/perl5/JSON/Validator.pm ]; then
+    wget -q --output-document=/usr/share/perl5/JSON/Validator.pm https://orgaknecht.lmscloud.net/updates/koha-21-05/JSON-Validator/Validator.pm
+fi
+ 
+if [ -f /usr/local/share/perl/5.32.1/JSON/Validator.pm ]; then
+    wget -q --output-document=/usr/local/share/perl/5.32.1/JSON/Validator.pm https://orgaknecht.lmscloud.net/updates/koha-21-05/JSON-Validator/Validator.pm
 fi
 
 # Stop apache2
@@ -189,6 +194,8 @@ chown -R "${KOHA_INSTANCE}-koha:${KOHA_INSTANCE}-koha" "/var/log/koha/${KOHA_INS
 koha-plack           --enable ${KOHA_INSTANCE}
 koha-z3950-responder --enable ${KOHA_INSTANCE}
 service koha-common start
+
+# Load sample data into our database
 
 # Start apache and rabbitmq-server
 service apache2 start
