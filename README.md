@@ -10,7 +10,7 @@
 To use this repo, you first need to setup the [community ktd](https://gitlab.com/koha-community/koha-testing-docker).
 Then you'll need to add some additional variables to your .bashrc, .zshenv or whatever.
 
-This is the config I currently use. Some of these vars may be unnecessary (atm). 
+This is the config I currently use.
 
 ```sh
 export LMS_PROJECTS_DIR=~/.local/src/lmsc
