@@ -7,15 +7,17 @@
 
 ## Usage
 
+To use this repo, you first need to setup the [community ktd](https://gitlab.com/koha-community/koha-testing-docker).
+Then you'll need to add some additional variables to your .bashrc, .zshenv or whatever.
+
+This is the config I currently use. Some of these vars may be unnecessary (atm). 
 ```sh
-To use this repo, you first need to setup the community ktd.
+export LMS_PROJECTS_DIR=~/.local/src/lmsc
+export LMS_PROJECTS_DIR="$LMS_PROJECTS_DIR"
+export LMS_SYNC_REPO=$LMS_PROJECTS_DIR/Koha-LMSCloud
+export LMS_KTD_HOME=$PROJECTS_DIR/koha-testing-docker
+export LMS_PATH=$PATH:$KTD_HOME/bin
 ```
-
-## Author
-
-👤 **Paul Derscheid**
-
-* Github: [@LMSCloudPaulD](https://github.com/LMSCloudPaulD)
 
 ## Show your support
 
