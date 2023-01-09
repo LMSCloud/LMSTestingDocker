@@ -17,7 +17,6 @@ export LMS_PROJECTS_DIR=~/.local/src/lmsc
 export LMS_PROJECTS_DIR="$LMS_PROJECTS_DIR"
 export LMS_SYNC_REPO=$LMS_PROJECTS_DIR/Koha-LMSCloud
 export LMS_KTD_HOME=$LMS_PROJECTS_DIR/LMSTestingDocker
-export LMS_PATH=$PATH:$KTD_HOME/bin
 ```
 
 Then, cp the directory contents to a local branch of the original ktd-repo.
