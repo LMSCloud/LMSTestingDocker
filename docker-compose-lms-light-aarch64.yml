@@ -19,7 +19,7 @@ services:
         cap_add:
             - ALL
         volumes:
-            - ${SYNC_REPO}:/kohadevbox/koha
+            - ${LMS_SYNC_REPO}:/kohadevbox/koha
         tmpfs:
             - /cover_db
             - /tmp
