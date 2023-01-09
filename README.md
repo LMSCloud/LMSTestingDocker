@@ -11,17 +11,22 @@ To use this repo, you first need to setup the [community ktd](https://gitlab.com
 Then you'll need to add some additional variables to your .bashrc, .zshenv or whatever.
 
 This is the config I currently use. Some of these vars may be unnecessary (atm). 
+
 ```sh
 export LMS_PROJECTS_DIR=~/.local/src/lmsc
 export LMS_PROJECTS_DIR="$LMS_PROJECTS_DIR"
 export LMS_SYNC_REPO=$LMS_PROJECTS_DIR/Koha-LMSCloud
-export LMS_KTD_HOME=$PROJECTS_DIR/koha-testing-docker
+export LMS_KTD_HOME=$LMS_PROJECTS_DIR/LMSTestingDocker
 export LMS_PATH=$PATH:$KTD_HOME/bin
 ```
 
-## Show your support
+Then, cp the directory contents to a local branch of the original ktd-repo.
 
-Give a ⭐️ if this project helped you!
+```sh
+cd $KTD_HOME
+git checkout -b ktd-lms
+rsync -a --exclude='*.md' $LMS_KTD_HOME/* $KTD_HOME
+```
 
 ***
 _This README was generated with ❤️ by [readme-md-generator](https://github.com/kefranabg/readme-md-generator)_
