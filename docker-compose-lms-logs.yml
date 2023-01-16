@@ -1,0 +1,14 @@
+version: '3'
+services:
+  logs:
+    image: busybox
+    volumes:
+      - /var/log/koha:/var/logs/koha/kohadev
+    volumes_from:
+      - koha
+    networks:
+      - kohanet
+
+networks:
+  kohanet:
+
