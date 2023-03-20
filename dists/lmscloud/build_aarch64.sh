@@ -19,6 +19,11 @@ while getopts ":p:t:" opt; do
     t )
       TAG=${OPTARG}
       ;;
+    h | - )
+      if [[ "${OPTARG}" == "help" || "${OPTARG}" == "" ]]; then
+        usage
+      fi
+      ;;
     \? )
       echo "Invalid option: -$OPTARG" 1>&2
       usage
