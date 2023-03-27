@@ -1,13 +1,13 @@
 #!/bin/bash
 
-cd "${KTD_HOME}" || exit 1
+cd "${KOHA_TESTING_DOCKER_HOME}" || exit 1
 
 usage() {
-  echo "Usage: $0 [-p <docker|ghcr>] [-t <tag>]" 1>&2
+  echo "Usage: $0 [-p <docker|ghcr>] [-t <tag>] [-h|--help]" 1>&2
   exit 1
 }
 
-while getopts ":p:t:" opt; do
+while getopts ":p:t:h-" opt; do
   case ${opt} in
     p )
       if [[ "${OPTARG}" != "docker" && "${OPTARG}" != "ghcr" ]]; then
@@ -18,6 +18,14 @@ while getopts ":p:t:" opt; do
       ;;
     t )
       TAG=${OPTARG}
+      ;;
+    h | --help )
+      usage
+      ;;
+    - )
+      if [[ "${OPTARG}" == "help" || "${OPTARG}" == "" ]]; then
+        usage
+      fi
       ;;
     \? )
       echo "Invalid option: -$OPTARG" 1>&2
