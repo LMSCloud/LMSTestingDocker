@@ -186,8 +186,6 @@ RUN cpack -G DEB \
     && dpkg -i nvim-linux64.deb 
 WORKDIR /kohadevbox
 RUN rm -rf neovim \
-    && mv ~/.config/nvim{,.bak} \
-    && mv /var/lib/koha/kohadev/.config/nvim{,.bak} \
     && git clone https://github.com/LazyVim/starter ~/.config/nvim \
     && rm -rf ~/.config/nvim/.git \
     && mkdir -p /var/lib/koha/kohadev/.config \
