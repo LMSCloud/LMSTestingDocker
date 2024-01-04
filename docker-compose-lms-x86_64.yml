@@ -25,7 +25,7 @@ services:
         networks:
             - kohanet
     koha:
-        image: jpahd/lmscloud-koha-x86_64:latest
+        image: ghcr.io/lmscloudpauld/lmscloud-koha-x86_64:latest
         depends_on:
             - db
             - es

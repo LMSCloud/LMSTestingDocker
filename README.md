@@ -1,7 +1,4 @@
-<h1 align="center">Welcome to LMSTestingDocker 👋</h1>
-<p>
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-blue.svg?cacheSeconds=2592000" />
-</p>
+# LMSTestingDocker
 
 > This project adds the missing pieces to get the community ktd running with LMSCloud's custom fork of koha.
 
@@ -23,9 +20,7 @@ Then, cp the directory contents to a local branch of the original ktd-repo.
 
 ```sh
 cd $KTD_HOME
-git checkout -b ktd-lms
+git checkout -B 22.11 origin/22.11 && git checkout -b ktd-lms
 rsync -a --exclude='*.md' $LMS_KTD_HOME/* $KTD_HOME
 ```
 
-***
-_This README was generated with ❤️ by [readme-md-generator](https://github.com/kefranabg/readme-md-generator)_
