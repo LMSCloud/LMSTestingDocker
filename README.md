@@ -23,4 +23,3 @@ cd $KTD_HOME
 git checkout -B 22.11 origin/22.11 && git checkout -b ktd-lms
 rsync -a --exclude='*.md' $LMS_KTD_HOME/* $KTD_HOME
 ```
-
