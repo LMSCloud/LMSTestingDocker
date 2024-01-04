@@ -181,7 +181,7 @@ RUN git clone https://github.com/neovim/neovim
 WORKDIR /kohadevbox/neovim
 RUN git checkout stable \
     && make CMAKE_BUILD_TYPE=RelWithDebInfo
-WORKDIR /kohadebox/neovim/build
+WORKDIR /kohadevbox/neovim/build
 RUN cpack -G DEB \
     && dpkg -i nvim-linux64.deb 
 WORKDIR /kohadevbox
