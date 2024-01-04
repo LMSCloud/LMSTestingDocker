@@ -165,6 +165,35 @@ RUN apt-get update \
     && rm -rf /var/cache/apt/archives/* \
     && rm -rf /var/lib/api/lists/*
 
+# Install some quality of life improvements
+RUN apt-get update \
+    && apt-get -y install \
+    ninja-build \
+    gettext \
+    cmake \
+    unzip \
+    curl \
+    fd-find \
+    ripgrep \
+    && rm -rf /var/cache/apt/archives/* \
+    && rm -rf /var/lib/api/lists/* 
+RUN git clone https://github.com/neovim/neovim
+WORKDIR /kohadevbox/neovim
+RUN git checkout stable \
+    && make CMAKE_BUILD_TYPE=RelWithDebInfo
+WORKDIR /kohadebox/neovim/build
+RUN cpack -G DEB \
+    && dpkg -i nvim-linux64.deb 
+WORKDIR /kohadevbox
+RUN rm -rf neovim \
+    && mv ~/.config/nvim{,.bak} \
+    && mv /var/lib/koha/kohadev/.config/nvim{,.bak} \
+    && git clone https://github.com/LazyVim/starter ~/.config/nvim \
+    && rm -rf ~/.config/nvim/.git \
+    && mkdir -p /var/lib/koha/kohadev/.config \
+    && cp -r ~/.config/nvim /var/lib/koha/kohadev/.config/nvim \
+    && chown -R kohadev-koha: /var/lib/koha/kohadev/.config
+
 VOLUME /kohadevbox/koha
 
 COPY files/run.sh /kohadevbox
