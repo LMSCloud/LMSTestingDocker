@@ -189,8 +189,7 @@ RUN rm -rf neovim \
     && git clone https://github.com/LazyVim/starter ~/.config/nvim \
     && rm -rf ~/.config/nvim/.git \
     && mkdir -p /var/lib/koha/kohadev/.config \
-    && cp -r ~/.config/nvim /var/lib/koha/kohadev/.config/nvim \
-    && chown -R kohadev-koha: /var/lib/koha/kohadev/.config
+    && cp -r ~/.config/nvim /var/lib/koha/kohadev/.config/nvim
 
 VOLUME /kohadevbox/koha
 
