@@ -12,7 +12,7 @@ services:
         networks:
             - kohanet
     koha:
-        image: ghcr.io/lmscloudpauld/lmscloud-koha-aarch64:latest
+        image: ghcr.io/lmscloudpauld/lmscloud-koha-aarch64:22.11.07
         depends_on:
             - db
             - memcached
