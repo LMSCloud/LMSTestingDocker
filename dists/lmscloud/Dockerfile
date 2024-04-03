@@ -168,13 +168,15 @@ RUN apt-get update \
 # Install some quality of life improvements
 RUN apt-get update \
     && apt-get -y install \
-    ninja-build \
-    gettext \
+    bat \
     cmake \
-    unzip \
     curl \
     fd-find \
+    fzf \
+    gettext \
+    ninja-build \
     ripgrep \
+    unzip \
     && rm -rf /var/cache/apt/archives/* \
     && rm -rf /var/lib/api/lists/* 
 RUN git clone https://github.com/neovim/neovim
