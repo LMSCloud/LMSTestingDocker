@@ -41,7 +41,7 @@ RUN apt-get -y update \
       iproute2 \
       libcarp-always-perl \
       libdata-printer-perl \
-      libdevel-repl-perl
+      libdevel-repl-perl \
       libfile-chdir-perl \
       libgit-repository-perl \
       libmemcached-tools \
@@ -58,7 +58,7 @@ RUN apt-get -y update \
       tig \
       tmux \
       vim \
-      wget \
+      wget
    && rm -rf /var/cache/apt/archives/* \
    && rm -rf /var/lib/apt/lists/*
 
