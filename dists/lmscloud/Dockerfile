@@ -32,12 +32,17 @@ RUN apt-get -y update \
     && apt-get -y upgrade \
     && apt-get -y install \
       apache2 \
+      apt-transport-https \
       build-essential \
       codespell \
       cpanminus \
+      curl \
       git \
-      tig \
+      iproute2 \
       libcarp-always-perl \
+      libdata-printer-perl \
+      libdevel-repl-perl
+      libfile-chdir-perl \
       libgit-repository-perl \
       libmemcached-tools \
       libmodule-install-perl \
@@ -45,19 +50,15 @@ RUN apt-get -y update \
       libtest-differences-perl \
       libtest-perl-critic-perl \
       libtest-perl-critic-progressive-perl \
-      libfile-chdir-perl \
-      libdata-printer-perl \
-      pmtools \
       locales \
-      netcat \
-      python-gdbm \
-      vim \
-      tmux \
-      wget \
-      curl \
-      apt-transport-https \
       mlocate \
-      iproute2 \
+      netcat \
+      pmtools \
+      python-gdbm \
+      tig \
+      tmux \
+      vim \
+      wget \
    && rm -rf /var/cache/apt/archives/* \
    && rm -rf /var/lib/apt/lists/*
 
@@ -125,8 +126,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends dpkg \
     && rm -rf /var/cache/apt/archives/* /var/lib/apt/lists/*
 
 # Add Node.js
-RUN wget -O- -q https://deb.nodesource.com/setup_14.x | bash -
-# Pin Node.js v14
+RUN wget -O- -q https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+      | gpg --dearmor \
+      | tee /usr/share/keyrings/nodesource.gpg >/dev/null \
+   && echo "deb [signed-by=/usr/share/keyrings/nodesource.gpg] https://deb.nodesource.com/node_18.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
+
+# Pin Node.js
 COPY files/nodejs.pin /etc/apt/preferences.d/nodejs
 
 # Add yarn repo
@@ -166,6 +171,7 @@ RUN apt-get update \
     && rm -rf /var/lib/api/lists/*
 
 # Install some quality of life improvements
+RUN cpanm App::perlimports -n
 RUN apt-get update \
     && apt-get -y install \
     bat \
