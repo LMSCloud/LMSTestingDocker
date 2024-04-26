@@ -58,7 +58,7 @@ RUN apt-get -y update \
       tig \
       tmux \
       vim \
-      wget
+      wget \
    && rm -rf /var/cache/apt/archives/* \
    && rm -rf /var/lib/apt/lists/*
 
