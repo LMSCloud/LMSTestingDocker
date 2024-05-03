@@ -1,5 +1,0 @@
-version: '3'
-services:
-  koha:
-    volumes:
-      - $OLAPI_REPO:/kohadevbox/koha/koha-open-library-api
