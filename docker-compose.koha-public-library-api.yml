@@ -2,4 +2,4 @@ version: "3"
 services:
   koha:
     volumes:
-      - $OLAPI_REPO:/kohadevbox/koha/koha-public-library-api
+      - $PLAPI_REPO:/kohadevbox/koha/koha-public-library-api
