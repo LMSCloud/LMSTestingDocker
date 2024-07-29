@@ -20,8 +20,10 @@ Then, cp the directory contents to a local branch of the original ktd-repo.
 
 ```sh
 cd $KTD_HOME
-git checkout -B 22.11 origin/22.11 && git checkout -b ktd-lms
+git checkout -B 22.11 origin/22.11 \
+  && git checkout -b ktd-lms # optional
 rsync -a --exclude='*.md' $LMSC_KTD_HOME/* $KTD_HOME
+git checkout main -- docker-compose-arm64.yml
 ```
 
 And run docker compose.
