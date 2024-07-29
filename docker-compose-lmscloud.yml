@@ -1,0 +1,6 @@
+version: "3"
+services:
+  koha:
+    image: ${KOHA_IMAGE} # e.g. KOHA_IMAGE=ghcr.io/lmscloudpauld/lmscloud-koha-{aarch64,x86_64}:latest docker compose ...
+    volumes:
+      - ${LMSC_SYNC_REPO}:/kohadevbox/koha
