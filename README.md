@@ -12,8 +12,8 @@ This is the config I currently use.
 ```sh
 export LMSC_PROJECTS_DIR="$HOME/Projects/lmsc"
 export LMSC_PROJECTS_DIR="$LMSC_PROJECTS_DIR"
-export LMSC_SYNC_REPO=$LMSC_PROJECTS_DIR/Koha-LMSCloud
-export LMSC_KTD_HOME=$LMSC_PROJECTS_DIR/LMSTestingDocker
+export LMSC_SYNC_REPO="$LMSC_PROJECTS_DIR/Koha-LMSCloud"
+export LMSC_KTD_HOME="$LMSC_PROJECTS_DIR/LMSTestingDocker"
 ```
 
 Then, cp the directory contents to a local branch of the original ktd-repo.
