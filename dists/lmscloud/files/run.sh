@@ -157,6 +157,17 @@ if [ "${KOHA_ELASTICSEARCH}" = "yes" ]; then
     ES_FLAG="--elasticsearch"
 fi
 
+# Install extra dependencies before any Koha code runs
+if [ -n "${EXTRA_APT}" ]; then
+    echo "Installing requested packages using apt: ${EXTRA_APT}"
+    apt-get update && apt-get install -y ${EXTRA_APT}
+fi
+
+if [ -n "${EXTRA_CPAN}" ]; then
+    echo "Installing requested Perl libraries: ${EXTRA_CPAN}"
+    cpanm --skip-installed ${EXTRA_CPAN}
+fi
+
 sed -i '/Koha::SearchEngine::Elasticsearch->reset_elasticsearch_mappings;/d' ${BUILD_DIR}/misc4dev/populate_db.pl
 
 perl ${BUILD_DIR}/misc4dev/do_all_you_can_do.pl \
