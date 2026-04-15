@@ -177,15 +177,20 @@ fi
 
 sed -i '/Koha::SearchEngine::Elasticsearch->reset_elasticsearch_mappings;/d' ${BUILD_DIR}/misc4dev/populate_db.pl
 
-perl ${BUILD_DIR}/misc4dev/do_all_you_can_do.pl \
-            --instance          ${KOHA_INSTANCE} ${ES_FLAG} \
-            --userid            ${KOHA_USER} \
-            --password          ${KOHA_PASS} \
-            --marcflavour       ${KOHA_MARC_FLAVOUR} \
-            --koha_dir          ${BUILD_DIR}/koha \
-            --opac-base-url     ${KOHA_OPAC_URL} \
-            --intranet-base-url ${KOHA_INTRANET_URL} \
-            --gitify_dir        ${BUILD_DIR}/gitify
+if [ "${SKIP_DATA_INIT}" = "yes" ]; then
+    echo "SKIP_DATA_INIT=yes — skipping do_all_you_can_do.pl (DB schema load + seed data)"
+    echo "You must manually run populate_db.pl and insert_data.pl after the container is up."
+else
+    perl ${BUILD_DIR}/misc4dev/do_all_you_can_do.pl \
+                --instance          ${KOHA_INSTANCE} ${ES_FLAG} \
+                --userid            ${KOHA_USER} \
+                --password          ${KOHA_PASS} \
+                --marcflavour       ${KOHA_MARC_FLAVOUR} \
+                --koha_dir          ${BUILD_DIR}/koha \
+                --opac-base-url     ${KOHA_OPAC_URL} \
+                --intranet-base-url ${KOHA_INTRANET_URL} \
+                --gitify_dir        ${BUILD_DIR}/gitify
+fi
 
 # Latest Depends
 if [ "${CPAN}" = "yes" ]; then
