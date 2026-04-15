@@ -1,0 +1,32 @@
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -51,19 +51,16 @@
+     echo "deb [signed-by=/etc/apt/trusted.gpg.d/koha.gpg] https://debian.koha-community.org/koha 25.11 main" >> /etc/apt/sources.list.d/koha.list && \
+     echo "deb [signed-by=/etc/apt/trusted.gpg.d/koha.gpg] https://debian.koha-community.org/koha-testing 25.11 main" >> /etc/apt/sources.list.d/koha.list
+ 
+-# Install koha-common
+-RUN apt-get -y update \
+-   && apt-cache policy koha-common \
+-   && apt-cache policy libmojolicious-perl \
+-   && apt-cache policy libjson-validator-perl \
+-   && apt-cache policy libmojolicious-plugin-openapi-perl \
+-   && apt-cache policy libyaml-libyaml-perl \
+-   && apt-get -y install \
+-         koha-common \
+-   && /etc/init.d/koha-common stop \
+-   && rm -rf /var/cache/apt/archives/* \
+-   && rm -rf /var/lib/apt/lists/* \
+-   && rm -rf /usr/share/koha/misc/translator/po/* # Do not embed PO files
++# Install koha-common from locally-built .deb (bind-mounted by build-ktd-image.sh
++# as koha-common.deb in the build context). Bind-mount keeps the .deb out of
++# every image layer — only the installed files land in this RUN's layer.
++RUN --mount=type=bind,source=koha-common.deb,target=/tmp/koha-common.deb \
++       apt-get -y update \
++    && (dpkg -i /tmp/koha-common.deb || apt-get -y -f install --no-install-recommends -o Dpkg::Options::=--force-overwrite) \
++    && /etc/init.d/koha-common stop \
++    && rm -rf /var/cache/apt/archives/* \
++    && rm -rf /var/lib/apt/lists/* \
++    && rm -rf /usr/share/koha/misc/translator/po/*
+ 
+ RUN mkdir /kohadevbox
+ WORKDIR /kohadevbox

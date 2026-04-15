@@ -1,4 +1,7 @@
 tmp/
+out/
+.cache/
 **/*.deb
+.build-container-script.sh
 
 **/.DS_Store

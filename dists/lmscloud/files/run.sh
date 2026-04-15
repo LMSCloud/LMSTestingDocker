@@ -378,8 +378,11 @@ if [ "$RUN_TESTS_AND_EXIT" = "yes" ]; then
 else
 
 # Change ownership of the .config dir of the instance user.
-# It's owned by root due to the neovim setup in the Dockerfile.
-chown -R "${KOHA_INSTANCE}-koha": /var/lib/koha/kohadev/.config
+# It's owned by root due to the neovim setup in the Dockerfile, but not
+# every image installs neovim — only chown if the dir exists.
+if [ -d "/var/lib/koha/${KOHA_INSTANCE}/.config" ]; then
+    chown -R "${KOHA_INSTANCE}-koha": "/var/lib/koha/${KOHA_INSTANCE}/.config"
+fi
 
 # start koha-reload-starman, if we have inotify installed
 #    if [ -f "/usr/bin/inotifywait" ]; then

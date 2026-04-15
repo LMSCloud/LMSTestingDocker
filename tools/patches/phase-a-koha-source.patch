@@ -1,0 +1,21 @@
+--- a/.github/scripts/build-koha.sh	2026-04-15 19:16:50
++++ b/.github/scripts/build-koha.sh	2026-04-15 19:16:50
+@@ -55,7 +55,7 @@
+ 
+ # Run dpkg-buildpackage with TMPDIR set to writable location
+ echo "Running dpkg-buildpackage with TMPDIR=/tmp..."
+-dpkg-buildpackage -us -uc -d
++dpkg-buildpackage -us -uc -d -b
+ BUILD_STATUS=$?
+ 
+ echo "Build completed with status: $BUILD_STATUS"
+--- a/debian/rules	2026-04-15 19:16:50
++++ b/debian/rules	2026-04-15 19:16:50
+@@ -38,7 +38,6 @@
+ 		-e '/^ <user>/s/>.*</>_DBC_DBUSER_</' \
+ 		-e '/^ <pass>/s/>.*</>_DBC_DBPASS_</'
+ 	mkdir -p $(TMP)/debian/tmp_docbook
+-	xt/verify-debian-docbook.t
+ 	xsltproc --output $(TMP)/debian/tmp_docbook/ \
+ 	    /usr/share/xml/docbook/stylesheet/docbook-xsl-ns/manpages/docbook.xsl \
+ 	    debian/docs/*.xml

@@ -4,10 +4,13 @@ services:
     image: ${KOHA_IMAGE} # e.g. KOHA_IMAGE=ghcr.io/lmscloudpauld/lmscloud-koha-{aarch64,x86_64}:latest docker compose ...
     volumes:
       - ${LMSC_SYNC_REPO}:/kohadevbox/koha
-      - ./dists/lmscloud/files/run.sh:/kohadevbox/run.sh
+      # run.sh is baked into the image now — no overlay mount needed.
+      # (Leaving one in with a relative path breaks under `ktd -f`, which
+      # resolves ./ against its own cwd and shadows the image file.)
     environment:
-      # New upstream deps not in 22.11 image — remove after 24.11 image is built
-      - EXTRA_CPAN=Struct::Diff Algorithm::Munkres
+      # Additional CPAN dependencies (if needed for development)
+      # Note: Most deps should now be in the base 25.11 image
+      - EXTRA_CPAN=${EXTRA_CPAN:-}
   es:
     image: koha/elasticsearch-icu:7.x-arm64
     environment:

@@ -1,59 +1,87 @@
 # LMSTestingDocker
 
-> This project adds the missing pieces to get the community ktd running with LMSCloud's custom fork of koha.
+LMSCloud's extensions for Koha Testing Docker (KTD) and a two-phase build
+pipeline for producing container images with a locally-built Koha package.
 
-## Usage
+Upstream KTD installs `koha-common` from the public apt repo. This pipeline
+builds `koha-common` from a Koha-LMSCloud (LMSCloud's Koha fork) checkout
+instead and injects it into a KTD-style image.
 
-To use this repo, you first need to setup the [community ktd](https://gitlab.com/koha-community/koha-testing-docker).
-Then you'll need to add some additional variables to your .bashrc, .zshenv or whatever.
+## Layout
 
-This is the config I currently use.
-
-```sh
-export LMSC_PROJECTS_DIR="$HOME/Projects/lmsc"
-export LMSC_PROJECTS_DIR="$LMSC_PROJECTS_DIR"
-export LMSC_SYNC_REPO="$LMSC_PROJECTS_DIR/Koha-LMSCloud"
-export LMSC_KTD_HOME="$LMSC_PROJECTS_DIR/LMSTestingDocker"
+```
+tools/                      Build pipeline
+dists/lmscloud/files/run.sh KTD entrypoint with LMS-specific hooks
+docker-compose-lmscloud.yml Compose overlay for dev use
+out/debian/                 .deb build output (git-ignored)
 ```
 
-Then, cp the directory contents to a local branch of the original ktd-repo.
+## Requirements
 
-```sh
-cd $KTD_HOME
-git checkout -B 22.11 origin/22.11 \
-  && git checkout -b ktd-lms # optional
-rsync -a --exclude='*.md' $LMSC_KTD_HOME/* $KTD_HOME
-git checkout main -- docker-compose-arm64.yml
+- Docker with buildx (for multi-arch / `--push`)
+- `LMSC_SYNC_REPO` pointing to a local Koha-LMSCloud checkout
+- The checkout must have `.github/scripts/build-koha.sh`
+
+## Quick start
+
+```bash
+export LMSC_SYNC_REPO="/path/to/Koha-LMSCloud"
+
+# Build .deb and image for local use (arm64)
+./tools/build-image.sh \
+  --koha-version <X.Y.Z>lmscloud \
+  --koha-branch <koha-branch> \
+  --ktd-branch 25.11 \
+  --platforms linux/arm64
+
+# Multi-arch + push to ghcr.io (needs PAT with write:packages)
+./tools/build-image.sh \
+  --koha-version <X.Y.Z>lmscloud \
+  --koha-branch <koha-branch> \
+  --ktd-branch 25.11 \
+  --platforms linux/amd64,linux/arm64 \
+  --push
 ```
 
-And run docker compose.
+Set `DEBUG=1` to enable bash-trace inside the Phase A container.
 
-```sh
-KOHA_IMAGE=ghcr.io/lmscloudpauld/lmscloud-koha-aarch64:latest
-  docker compose \
-  -f docker-compose-arm64.yml \
-  -f docker-compose-lmscloud.yml \
-  # -f docker-compose.koha-public-library-api.yml \
-  -p koha \
-  up
+## Image tag convention
+
+| Platform                              | Image                                              |
+| ------------------------------------- | -------------------------------------------------- |
+| `linux/arm64`                         | `<registry>/lmscloud-koha-aarch64:<version>`       |
+| `linux/amd64`                         | `<registry>/lmscloud-koha-x86_64:<version>`        |
+| multi-arch                            | `<registry>/lmscloud-koha:<version>` (no suffix)   |
+
+The `lmscloud` suffix in the version (e.g. `25.11.03lmscloud`) is stripped
+when forming the tag — the registry namespace already says `lmscloud-koha`.
+
+The default `<registry>` is `ghcr.io/lmscloudpauld` (the namespace this
+repo's pipeline currently publishes to). Override with `LMS_REGISTRY` (or
+`--registry` on `build-ktd-image.sh`) when forking or pushing elsewhere.
+
+## KTD branch → Debian dist
+
+| KTD branch                         | Debian dist |
+| ---------------------------------- | ----------- |
+| `24.05`, `24.11`                   | bullseye    |
+| `25.05`, `25.11`                   | bookworm    |
+| `26.05`, `26.11`, `master`, `main` | trixie      |
+| anything else                      | bookworm    |
+
+## Running the image
+
+```bash
+KOHA_IMAGE=ghcr.io/lmscloudpauld/lmscloud-koha-aarch64:25.11.03 \
+SKIP_DATA_INIT=yes \
+docker compose -f docker-compose-lmscloud.yml up
 ```
 
-Depending on your architecture swap out these values in the `docker compose` call.
+The compose overlay mounts `${LMSC_SYNC_REPO}` at `/kohadevbox/koha` and
+overlays our patched `run.sh`. Supported environment variables: `SKIP_DATA_INIT`,
+`EXTRA_APT`, `EXTRA_CPAN`.
 
-| arch        | amd64                                               | arm64                                                |
-| ----------- | --------------------------------------------------- | ---------------------------------------------------- |
-| base image  | `ghcr.io/lmscloudpauld/lmscloud-koha-x86_64:latest` | `ghcr.io/lmscloudpauld/lmscloud-koha-aarch64:latest` |
-| entry point | `docker-compose-light.yml`                          | `docker-compose-arm64.yml`                           |
+## Legacy 22.11 branch
 
-## Running 24.11.x code on a 22.11 image
-
-After the merge of upstream/24.11.x, new Perl dependencies are required that aren't in the 22.11 container image. The `docker-compose-lmscloud.yml` handles this via:
-
-1. **Volume mount** of a patched `run.sh` that supports `EXTRA_CPAN` / `EXTRA_APT` environment variables
-2. **Environment variable** `EXTRA_CPAN` listing the missing modules
-
-The patched `run.sh` installs these dependencies at container startup, before any Koha code runs. This avoids needing to rebuild the Docker image.
-
-To add more missing dependencies as they're discovered, append them (space-separated) to the `EXTRA_CPAN` value in `docker-compose-lmscloud.yml`.
-
-Once a 24.11 Docker image is built, these workarounds can be removed.
+For the old rsync-based 22.11 workflow, check out the `22.11` git branch and
+follow its README. The tooling here does not apply.
