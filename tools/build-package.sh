@@ -139,6 +139,14 @@ cp -r /workspace/. ${BUILD_DIR}/workspace/
 cd ${BUILD_DIR}/workspace
 echo "    Copied $(du -sh . | cut -f1)"
 
+# Remove untracked + ignored artifacts (e.g. stale yarn-built dist files in
+# koha-tmpl/{opac,intranet}-tmpl/.../js/vue/dist). Those get picked up by
+# Makefile.PL's $file_map under OPAC_TMPL_DIR; pm_to_blib then locks them
+# to mode 0444 in blib/, and the later move_compiled_js cp recipe fails
+# with "Permission denied" trying to overwrite. Build from a clean tree.
+echo "    Cleaning untracked/ignored files in workspace copy..."
+git clean -fdx -q
+
 # Create the /tmp/koha-common symlink that build-koha.sh expects
 echo "    Creating expected directory structure..."
 ln -s ${BUILD_DIR}/workspace /tmp/koha-common
