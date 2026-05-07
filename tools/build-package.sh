@@ -158,8 +158,9 @@ echo "[3/6] Checking out branch ${KOHA_BRANCH}..."
 git checkout "${KOHA_BRANCH}" 2>&1 || (git fetch origin "${KOHA_BRANCH}" 2>&1 && git checkout "${KOHA_BRANCH}" 2>&1)
 echo "    Now on branch: $(git branch --show-current)"
 
-# Apply the Koha-source patch: forces binary-only dpkg-buildpackage. A
-# real patch file (not sed) so upstream drift fails loudly.
+# Apply the Koha-source patch: forces binary-only dpkg-buildpackage
+# (drops the source package build). A real patch file (not sed) so
+# upstream drift fails loudly.
 echo "    Applying Koha-source patch..."
 patch -p1 --no-backup-if-mismatch < /patches/phase-a-koha-source.patch
 
