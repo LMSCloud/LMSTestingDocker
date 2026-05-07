@@ -7,24 +7,70 @@ export TEMP=/tmp
 
 # Handy variables
 export KOHA_INTRANET_FQDN=${KOHA_INTRANET_PREFIX}${KOHA_INSTANCE}${KOHA_INTRANET_SUFFIX}${KOHA_DOMAIN}
-export KOHA_INTRANET_URL=http://${KOHA_INTRANET_FQDN}:${KOHA_INTRANET_PORT}
 export KOHA_OPAC_FQDN=${KOHA_OPAC_PREFIX}${KOHA_INSTANCE}${KOHA_OPAC_SUFFIX}${KOHA_DOMAIN}
-export KOHA_OPAC_URL=http://${KOHA_OPAC_FQDN}:${KOHA_OPAC_PORT}
+
+# Honor pre-set URLs (e.g. for proxied setups), only fall back to the FQDN form
+# when the caller hasn't supplied one.
+if [ -z "${KOHA_OPAC_URL}" ]; then
+    export KOHA_OPAC_URL=http://${KOHA_OPAC_FQDN}:${KOHA_OPAC_PORT}
+fi
+if [ -z "${KOHA_INTRANET_URL}" ]; then
+    export KOHA_INTRANET_URL=http://${KOHA_INTRANET_FQDN}:${KOHA_INTRANET_PORT}
+fi
 
 export PATH=${PATH}:/kohadevbox/bin:/kohadevbox/koha/node_modules/.bin/:/kohadevbox/node_modules/.bin/
 
 # Node stuff
 export NODE_PATH=/kohadevbox/node_modules:$NODE_PATH
 
+# Escape hatch: pull a remote run.sh and exec it instead. Useful for iterating
+# on this script without rebuilding the image.
+if [ "${DEBUG_RUN}" = "yes" ]; then
+    echo "DEBUG_RUN_URL=$DEBUG_RUN_URL"
+    wget ${DEBUG_RUN_URL} -O /tmp/run.sh
+    bash /tmp/run.sh
+    exit
+fi
+
 # Set a fixed hostname
 echo "kohadevbox" > /etc/hostname
+
+# Bail early with a clear message if SYNC_REPO didn't land us on a Koha clone.
+if [ ! -f "${BUILD_DIR}/koha/about.pl" ]; then
+    echo "The environment variable SYNC_REPO does not point to a valid Koha git repository."
+    exit 2
+fi
+
+# Latest Depends — install before any Koha code runs so missing modules don't
+# trip cp_debian_files.pl / koha-create / populate_db.pl.
+if [ "${CPAN}" = "yes" ]; then
+    echo "Installing latest versions of dependancies from cpan"
+    apt update
+    apt install -y cpanoutdated
+    cpan-outdated --exclude-core -p | cpanm
+fi
+
+if [ "${INSTALL_MISSING_FROM_CPANFILE}" = "yes" ]; then
+    cpanm --skip-installed --installdeps ${BUILD_DIR}/koha/
+fi
+
+if [ -n "${EXTRA_APT}" ]; then
+    echo "Installing requested packages using apt: ${EXTRA_APT}"
+    apt update
+    apt install -y ${EXTRA_APT}
+fi
+
+if [ -n "${EXTRA_CPAN}" ]; then
+    echo "Installing requested Perl libraries: ${EXTRA_CPAN}"
+    cpanm --skip-installed ${EXTRA_CPAN}
+fi
 
 append_if_absent()
 {
     local string=$1
     local file=$2
 
-    if grep -q -x -v "$string" $file; then
+    if ! grep -Fxq "$string" "$file"; then
         echo $string >> $file
     fi
 }
@@ -50,10 +96,15 @@ fi
 # debug failing apache --restart
 sudo service --status-all
 
-# Clone before calling cp_debian_files.pl
+# Optional override clones for misc4dev / qa-test-tools.
 if [ "${DEBUG_GIT_REPO_MISC4DEV}" = "yes" ]; then
     rm -rf ${BUILD_DIR}/misc4dev
     git clone -b ${DEBUG_GIT_REPO_MISC4DEV_BRANCH} ${DEBUG_GIT_REPO_MISC4DEV_URL} ${BUILD_DIR}/misc4dev
+fi
+
+if [ "${DEBUG_GIT_REPO_QATESTTOOLS}" = "yes" ]; then
+    rm -rf ${BUILD_DIR}/qa-test-tools
+    git clone -b ${DEBUG_GIT_REPO_QATESTTOOLS_BRANCH} ${DEBUG_GIT_REPO_QATESTTOOLS_URL} ${BUILD_DIR}/qa-test-tools
 fi
 
 # Make sure we use the files from the git clone for creating the instance
@@ -65,8 +116,12 @@ perl ${BUILD_DIR}/misc4dev/cp_debian_files.pl \
 # Wait for the DB server startup
 while ! nc -z db 3306; do sleep 1; done
 
+export DB_NAME="koha_${KOHA_INSTANCE}"
+export DB_PASSWORD=${KOHA_DB_PASSWORD}
+export DB_USER="koha_${KOHA_INSTANCE}"
+
 # TODO: Have bugs pushed so all this is a koha-create parameter
-echo "${KOHA_INSTANCE}:koha_${KOHA_INSTANCE}:${KOHA_DB_PASSWORD}:koha_${KOHA_INSTANCE}" > /etc/koha/passwd
+echo "${KOHA_INSTANCE}:${DB_USER}:${DB_PASSWORD}:${DB_NAME}" > /etc/koha/passwd
 # TODO: Get rid of this hack with the relevant bug
 echo "[client]"                   > /etc/mysql/koha-common.cnf
 echo "host     = ${DB_HOSTNAME}" >> /etc/mysql/koha-common.cnf
@@ -76,8 +131,8 @@ echo "password = password"       >> /etc/mysql/koha-common.cnf
 
 echo "[client]"                          > /etc/mysql/koha_${KOHA_INSTANCE}.cnf
 echo "host     = ${DB_HOSTNAME}"        >> /etc/mysql/koha_${KOHA_INSTANCE}.cnf
-echo "user     = koha_${KOHA_INSTANCE}" >> /etc/mysql/koha_${KOHA_INSTANCE}.cnf
-echo "password = ${KOHA_DB_PASSWORD}"   >> /etc/mysql/koha_${KOHA_INSTANCE}.cnf
+echo "user     = ${DB_USER}"            >> /etc/mysql/koha_${KOHA_INSTANCE}.cnf
+echo "password = ${DB_PASSWORD}"        >> /etc/mysql/koha_${KOHA_INSTANCE}.cnf
 
 # Get rid of Apache warnings
 append_if_absent "ServerName kohadevbox"        /etc/apache2/apache2.conf
@@ -87,28 +142,72 @@ append_if_absent "Listen ${KOHA_OPAC_PORT}"     /etc/apache2/ports.conf
 # Pull the names of the environment variables to substitute from defaults.env and convert them to a string of the format "$VAR1:$VAR2:$VAR3", etc.
 VARS_TO_SUB=`cut -d '=' -f1 ${BUILD_DIR}/templates/defaults.env  | tr '\n' ':' | sed -e 's/:/:$/g' | awk '{print "$"$1}' | sed -e 's/:\$$//'`
 # Add additional vars to sub from this script that are not in defaults.env
-VARS_TO_SUB="\$BUILD_DIR:$VARS_TO_SUB";
+VARS_TO_SUB="\$DB_NAME:\$DB_PASSWORD:\$DB_USER:\$BUILD_DIR:$VARS_TO_SUB"
 
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/root_bashrc           > /root/.bashrc
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/vimrc                 > /root/.vimrc
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/bash_aliases          > /root/.bash_aliases
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/koha-conf-site.xml.in > /etc/koha/koha-conf-site.xml.in
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/koha-sites.conf       > /etc/koha/koha-sites.conf
-# .gitconfig shouldn't get GIT_USER_* variables replaced
-cp ${BUILD_DIR}/templates/gitconfig /root/.gitconfig
+[ -f ${BUILD_DIR}/templates/sudoers ] && \
+    envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/sudoers > /etc/sudoers.d/${KOHA_INSTANCE}
 
 # bin
 mkdir -p ${BUILD_DIR}/bin
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/bin/dbic > ${BUILD_DIR}/bin/dbic
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/bin/flush_memcached > ${BUILD_DIR}/bin/flush_memcached
+[ -f ${BUILD_DIR}/templates/bin/bisect_with_test ] && \
+    envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/bin/bisect_with_test > ${BUILD_DIR}/bin/bisect_with_test
+
+LSB_RELEASE=$(lsb_release -s -c 2> /dev/null)
+# Distro specific workarounds
+if [ "${LSB_RELEASE}" = "trixie" ]; then
+    echo "[client]"  >> /etc/mysql/my.cnf
+    echo "ssl = off" >> /etc/mysql/my.cnf
+fi
 
 # Make sure things are executable on /bin.
 chmod +x ${BUILD_DIR}/bin/*
 
+cd ${BUILD_DIR}
 koha-create --request-db ${KOHA_INSTANCE} --memcached-servers memcached:11211
-# Fix UID
-if [ ${LOCAL_USER_ID} ]; then
+
+envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/vimrc > /var/lib/koha/${KOHA_INSTANCE}/.vimrc
+chown "${KOHA_INSTANCE}-koha" "/var/lib/koha/${KOHA_INSTANCE}/.vimrc"
+
+if [ -d "${BUILD_DIR}/howto" ]; then
+    echo "Install Koha-how-to"
+    rm -f ${BUILD_DIR}/koha/how-to.pl ${BUILD_DIR}/koha/koha-tmpl/intranet-tmpl/prog/en/modules/how-to.tt
+    ln -s ${BUILD_DIR}/howto/how-to.pl ${BUILD_DIR}/koha/how-to.pl
+    ln -s ${BUILD_DIR}/howto/how-to.tt ${BUILD_DIR}/koha/koha-tmpl/intranet-tmpl/prog/en/modules/how-to.tt
+fi
+
+if [ -d "/kohadevbox/Cypress" ]; then
+    echo "[cypress] Make the pre-built cypress available to the instance user [HACK]"
+
+    mkdir -p "/var/lib/koha/${KOHA_INSTANCE}/.cache" \
+      && echo "    [*] Created cache dir /var/lib/koha/${KOHA_INSTANCE}/.cache/" \
+      || echo "    [x] Error creating cache dir /var/lib/koha/${KOHA_INSTANCE}/.cache/"
+
+    chown -R "${KOHA_INSTANCE}-koha:${KOHA_INSTANCE}-koha" "/var/lib/koha/${KOHA_INSTANCE}/.cache/" \
+      && echo "    [*] Chowning /var/lib/koha/${KOHA_INSTANCE}/.cache/" \
+      || echo "    [x] Error chowning cache dir /var/lib/koha/${KOHA_INSTANCE}/.cache/"
+
+    ln -sf /kohadevbox/Cypress "/var/lib/koha/${KOHA_INSTANCE}/.cache/" \
+      && echo "    [*] Cypress dir linked to /var/lib/koha/${KOHA_INSTANCE}/.cache/" \
+      || echo "    [x] Error linking Cypress dir to /var/lib/koha/${KOHA_INSTANCE}/.cache/"
+fi
+
+# Fix UID if not empty, and differs from 1000 (Docker's default for the next UID)
+if [[ ! -z "${LOCAL_USER_ID}" && "${LOCAL_USER_ID}" != "1000" ]]; then
     usermod -o -u ${LOCAL_USER_ID} "${KOHA_INSTANCE}-koha"
+
+    if [[ "${SKIP_CYPRESS_CHOWN}" != "yes" && -d "/kohadevbox/Cypress" ]]; then
+        chown -R "${KOHA_INSTANCE}-koha:${KOHA_INSTANCE}-koha" "/kohadevbox/Cypress" \
+          && echo "    [*] Cypress dir chowned correctly" \
+          || echo "    [x] Error running chown on Cypress dir"
+    fi
+
     # Fix permissions due to UID change
     chown -R "${KOHA_INSTANCE}-koha" "/var/cache/koha/${KOHA_INSTANCE}"
     chown -R "${KOHA_INSTANCE}-koha" "/var/lib/koha/${KOHA_INSTANCE}"
@@ -116,6 +215,92 @@ if [ ${LOCAL_USER_ID} ]; then
     chown -R "${KOHA_INSTANCE}-koha" "/var/log/koha/${KOHA_INSTANCE}"
     chown -R "${KOHA_INSTANCE}-koha" "/var/run/koha/${KOHA_INSTANCE}"
     chown -R "${KOHA_INSTANCE}-koha" "/kohadevbox/node_modules"
+    chown -R "${KOHA_INSTANCE}-koha" ${BUILD_DIR}/misc4dev
+    chown -R "${KOHA_INSTANCE}-koha" ${BUILD_DIR}/gitify
+    [ -d ${BUILD_DIR}/qa-test-tools ] && chown -R "${KOHA_INSTANCE}-koha" ${BUILD_DIR}/qa-test-tools
+fi
+
+if [[ ${SKIP_L10N} != "yes" ]]; then
+    if [[ ! -z "$KOHA_IMAGE" && ! "$KOHA_IMAGE" =~ ^main ]]; then
+        l10n_branch=${KOHA_IMAGE:0:5}
+    else
+        l10n_branch="main"
+    fi
+
+    set +e
+
+    echo "[koha-l10n] Handling koha-l10n as requested"
+
+    if [ ! -d "$BUILD_DIR/koha/misc/translator/po" ]; then
+        echo "    [*] Cloning koha-l10n into misc/translator/po"
+        sudo koha-shell ${KOHA_INSTANCE} -c "\
+            git clone --depth 1 --branch ${l10n_branch} https://gitlab.com/koha-community/koha-l10n.git $BUILD_DIR/koha/misc/translator/po"
+    elif [ -d "$BUILD_DIR/koha/misc/translator/po/.git" ]; then
+        echo "    [*] Chowning po files (safety measure)"
+        chown -R "${KOHA_INSTANCE}-koha" "$BUILD_DIR/koha/misc/translator/po"
+        echo "    [*] Fetching koha-l10n"
+        sudo koha-shell ${KOHA_INSTANCE} -c "\
+            git config --global --add safe.directory $BUILD_DIR/koha/misc/translator/po ; \
+            git -C $BUILD_DIR/koha/misc/translator/po fetch origin ; \
+            git -C $BUILD_DIR/koha/misc/translator/po checkout -B ${l10n_branch} origin/${l10n_branch}"
+    fi
+
+    set -e
+else
+    echo "[koha-l10n] Skipping"
+fi
+
+echo "[API logging] Set TRACE to API log4perl config"
+sed -i 's/log4perl.logger.api = WARN, API/log4perl.logger.api = TRACE, API/' /etc/koha/sites/${KOHA_INSTANCE}/log4perl.conf \
+  && echo "    [*] TRACE set for the API log4perl configuration" \
+  || echo "    [x] Error setting TRACE for the API log4perl configuration"
+
+echo "[git] Setting up Git on the instance user"
+echo "    [*] Generating /var/lib/koha/${KOHA_INSTANCE}/.gitconfig"
+sudo koha-shell ${KOHA_INSTANCE} -c "\
+    cp ${BUILD_DIR}/templates/gitconfig /var/lib/koha/${KOHA_INSTANCE}/.gitconfig"
+
+echo "    [*] General setup"
+sudo koha-shell ${KOHA_INSTANCE} -c "\
+    cd ${BUILD_DIR}/koha ; \
+    git config --global --add safe.directory ${BUILD_DIR}/koha ; \
+    git config --global user.name  \"${GIT_USER_NAME}\" ; \
+    git config --global user.email \"${GIT_USER_EMAIL}\" ; \
+    git config bz.default-tracker bugs.koha-community.org ; \
+    git config bz.default-product Koha ; \
+    git config --global bz-tracker.bugs.koha-community.org.path /bugzilla3 ; \
+    git config --global bz-tracker.bugs.koha-community.org.https true ; \
+    git config --global core.whitespace trailing-space,space-before-tab ; \
+    git config --global apply.whitespace fix ; \
+    git config --global bz-tracker.bugs.koha-community.org.bz-user     \"${GIT_BZ_USER}\" ; \
+    git config --global bz-tracker.bugs.koha-community.org.bz-password \"${GIT_BZ_PASSWORD}\" "
+
+GIT_BASE_DIR=${BUILD_DIR}/koha
+if [ "${GIT_WORKTREE_SOURCE}" != "" ]; then
+    # Git worktree: .git is a file pointing at the main checkout's gitdir.
+    # Add the main-checkout root to safe.directory so ops as the instance user
+    # don't fail with "dubious ownership" once UID is remapped.
+    echo "    [!] Detected worktree: pointing to '${GIT_WORKTREE_SOURCE}'"
+    GIT_BASE_DIR=${GIT_WORKTREE_SOURCE}
+    sudo koha-shell ${KOHA_INSTANCE} -c "\
+        cd ${BUILD_DIR}/koha ; \
+        git config --global --add safe.directory ${GIT_WORKTREE_SOURCE}"
+    echo "    [*] Added '${GIT_WORKTREE_SOURCE}' to safe directories"
+fi
+
+if [ -d "${BUILD_DIR}/git_hooks" ]; then
+    if [ "${GIT_WORKTREE_SOURCE}" != "" ]; then
+        # Skip for worktrees — .git is a file, not a directory; hooksPath would
+        # point at a path that doesn't exist in the working tree.
+        echo "    [!] Skipping hooks setup (worktree)"
+    else
+        echo "    [*] Installing and setting hooks (${GIT_BASE_DIR})"
+        sudo koha-shell ${KOHA_INSTANCE} -c "\
+            mkdir -p ${GIT_BASE_DIR}/.git/hooks/ktd ; \
+            cp ${BUILD_DIR}/git_hooks/* ${GIT_BASE_DIR}/.git/hooks/ktd ; \
+            cd ${GIT_BASE_DIR} ; \
+            git config --local core.hooksPath .git/hooks/ktd"
+    fi
 fi
 
 # This needs to be done ONCE koha-create has run (i.e. kohadev-koha user exists)
@@ -126,55 +311,44 @@ cd ${BUILD_DIR}/gitify
 ./koha-gitify ${KOHA_INSTANCE} "/kohadevbox/koha"
 cd ${BUILD_DIR}
 
-koha-enable ${KOHA_INSTANCE} 
+koha-enable ${KOHA_INSTANCE}
 a2ensite ${KOHA_INSTANCE}.conf
+
+# Stage Koha's package.json/yarn.lock outside the source tree and install into
+# /kohadevbox/node_modules so the host source isn't polluted with node_modules.
+if [ -f /kohadevbox/koha/package.json ] && [ -f /kohadevbox/koha/yarn.lock ]; then
+    cp /kohadevbox/koha/package.json /kohadevbox
+    cp /kohadevbox/koha/yarn.lock    /kohadevbox
+    # Wipe possible residual directories from previous engine
+    rm -rf /var/lib/koha/${KOHA_INSTANCE}/.cache/js-v8flags
+    rm -rf /var/lib/koha/${KOHA_INSTANCE}/.cache/yarn
+    yarn install --modules-folder /kohadevbox/node_modules
+fi
+
+# LMSCloud: also install in-place under /kohadevbox/koha so the host sees the
+# same node_modules layout the build expects (frozen lockfile preferred, plain
+# install as fallback). Tolerated to fail.
+if [ -f "${BUILD_DIR}/koha/package.json" ]; then
+    echo "Running yarn install to update node dependencies in koha source..."
+    (cd ${BUILD_DIR}/koha && yarn install --frozen-lockfile 2>/dev/null || yarn install) || true
+fi
 
 # Update /etc/hosts so the www tests can run
 echo "127.0.0.1    ${KOHA_OPAC_FQDN} ${KOHA_INTRANET_FQDN}" >> /etc/hosts
 
 envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/instance_bashrc > /var/lib/koha/${KOHA_INSTANCE}/.bashrc
-
-# Configure git-bz
-cd /kohadevbox/koha
-git config --global --add safe.directory /kohadevbox/koha
-git config --global user.name "${GIT_USER_NAME}"
-git config --global user.email "${GIT_USER_EMAIL}"
-git config bz.default-tracker bugs.koha-community.org
-git config bz.default-product Koha
-git config --global bz-tracker.bugs.koha-community.org.path /bugzilla3
-git config --global bz-tracker.bugs.koha-community.org.https true
-git config --global core.whitespace trailing-space,space-before-tab
-git config --global apply.whitespace fix
-git config --global bz-tracker.bugs.koha-community.org.bz-user "${GIT_BZ_USER}"
-git config --global bz-tracker.bugs.koha-community.org.bz-password "${GIT_BZ_PASSWORD}"
-
-if [ "${DEBUG_GIT_REPO_QATESTTOOLS}" = "yes" ]; then
-    rm -rf ${BUILD_DIR}/qa-test-tools
-    git clone -b ${DEBUG_GIT_REPO_QATESTTOOLS_BRANCH} ${DEBUG_GIT_REPO_QATESTTOOLS_URL} ${BUILD_DIR}/qa-test-tools
-fi
+envsubst "$VARS_TO_SUB" < ${BUILD_DIR}/templates/bash_aliases    > /var/lib/koha/${KOHA_INSTANCE}/.bash_aliases
 
 if [ "${KOHA_ELASTICSEARCH}" = "yes" ]; then
     ES_FLAG="--elasticsearch"
 fi
 
-# Install extra dependencies before any Koha code runs
-if [ -n "${EXTRA_APT}" ]; then
-    echo "Installing requested packages using apt: ${EXTRA_APT}"
-    apt-get update && apt-get install -y ${EXTRA_APT}
+if [ "${USE_EXISTING_DB}" = "yes" ]; then
+    USE_EXISTING_DB_FLAG="--use-existing-db"
 fi
 
-if [ -n "${EXTRA_CPAN}" ]; then
-    echo "Installing requested Perl libraries: ${EXTRA_CPAN}"
-    cpanm --skip-installed ${EXTRA_CPAN}
-fi
-
-# LMSCloud: update node dependencies before any build runs
-if [ -f "${BUILD_DIR}/koha/package.json" ]; then
-    echo "Running yarn install to update node dependencies..."
-    cd ${BUILD_DIR}/koha && yarn install --frozen-lockfile 2>/dev/null || yarn install || true
-    cd ${BUILD_DIR}
-fi
-
+# LMSCloud: misc4dev's populate_db.pl resets ES mappings even when ES is
+# disabled, which fails our flow. Strip the offending line.
 sed -i '/Koha::SearchEngine::Elasticsearch->reset_elasticsearch_mappings;/d' ${BUILD_DIR}/misc4dev/populate_db.pl
 
 if [ "${SKIP_DATA_INIT}" = "yes" ]; then
@@ -182,7 +356,7 @@ if [ "${SKIP_DATA_INIT}" = "yes" ]; then
     echo "You must manually run populate_db.pl and insert_data.pl after the container is up."
 else
     perl ${BUILD_DIR}/misc4dev/do_all_you_can_do.pl \
-                --instance          ${KOHA_INSTANCE} ${ES_FLAG} \
+                --instance          ${KOHA_INSTANCE} ${ES_FLAG} ${USE_EXISTING_DB_FLAG} \
                 --userid            ${KOHA_USER} \
                 --password          ${KOHA_PASS} \
                 --marcflavour       ${KOHA_MARC_FLAVOUR} \
@@ -192,22 +366,44 @@ else
                 --gitify_dir        ${BUILD_DIR}/gitify
 fi
 
-# Latest Depends
-if [ "${CPAN}" = "yes" ]; then
-    echo "Installing latest versions of dependancies from cpan"
-    apt install cpanoutdated
-    cpan-outdated --exclude-core -p | cpanm
-fi
-
-# Install everything in Koha's cpanfile, may include libs for extra patches being tested
-if [ "${INSTALL_MISSING_FROM_CPANFILE}" = "yes" ]; then
-    cpanm --skip-installed --installdeps ${BUILD_DIR}/koha/
-fi
-
 # Stop apache2
 service apache2 stop
 
-chown -R "${KOHA_INSTANCE}-koha:${KOHA_INSTANCE}-koha" "/var/log/koha/${KOHA_INSTANCE}"
+echo "[logs] Chowning logs"
+chown -R "${KOHA_INSTANCE}-koha:${KOHA_INSTANCE}-koha" "/var/log/koha/${KOHA_INSTANCE}" \
+  && echo "    [*] Success chowning /var/log/koha/${KOHA_INSTANCE}" \
+  || echo "    [x] Error chowning cache dir /var/log/koha/${KOHA_INSTANCE}"
+
+if [ "${ENABLE_PLUGINS}" = "yes" ] && [ -d "${BUILD_DIR}/plugins" ]; then
+
+    echo "[plugins] Installing plugins"
+
+    PLUGINS_STRING=""
+    counter=0
+
+    for plugin_dir in $(find ${BUILD_DIR}/plugins -mindepth 1 -maxdepth 1 -type d); do
+
+        echo "    [*] Found: ${plugin_dir}"
+
+        entry=" <pluginsdir>${BUILD_DIR}/plugins/$(basename $plugin_dir)</pluginsdir>"
+
+        # Append the new plugin's entry
+        if [ "${counter}" -ge 1 ]; then
+            PLUGINS_STRING="${PLUGINS_STRING}\n${entry}"
+        else
+            PLUGINS_STRING="${entry}"
+        fi
+
+        counter=$((counter+1))
+    done
+
+    flush_memcached
+    # replace the placeholder with the plugins entries
+    sed -i "s# <!--pluginsdir>YOUR_PLUGIN_DIR_HERE</pluginsdir-->#$(echo "$PLUGINS_STRING")#" /etc/koha/sites/${KOHA_INSTANCE}/koha-conf.xml
+    # run the plugins installer
+    perl ${BUILD_DIR}/koha/misc/devel/install_plugins.pl
+    echo "    [*] Plugins loaded!"
+fi
 
 # Enable and start koha-plack and koha-z3950-responder
 koha-plack           --enable ${KOHA_INSTANCE}
@@ -218,180 +414,66 @@ service koha-common start
 service apache2 start
 service rabbitmq-server start || true # Don't crash if rabbitmq-server didn't start
 
+touch /ktd_ready
+echo "koha-testing-docker has started up and is ready to be enjoyed!"
+
 # if KOHA_PROVE_CPUS is not set, then use nproc
 if [ -z ${KOHA_PROVE_CPUS} ]; then
     KOHA_PROVE_CPUS=`nproc`
 fi
 
 if [ "$RUN_TESTS_AND_EXIT" = "yes" ]; then
-    cd ${BUILD_DIR}/koha
-    rm -rf /cover_db/*
+
+    export KOHA_TESTING=1
+
+    if [ "${TEST_DB_UPGRADE}" = "yes" ]; then
+        # Note that --run-all-tests includes this
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-db-upgrade-only
+    fi
 
     if [ ${COVERAGE} ]; then
-        koha-shell ${KOHA_INSTANCE} -c "rm -rf cover_db;
-                                  JUNIT_OUTPUT_FILE=junit_main.xml \
-                                  PERL5OPT=-MDevel::Cover=-db,/cover_db \
-                                  KOHA_TESTING=1 \
-                                  KOHA_NO_TABLE_LOCKS=1 \
-                                  KOHA_INTRANET_URL=http://koha:8081 \
-                                  KOHA_OPAC_URL=http://koha:8080 \
-                                  KOHA_USER=${KOHA_USER} \
-                                  KOHA_PASS=${KOHA_PASS} \
-                                  NODE_PATH=${NODE_PATH} \
-                                  PATH=${PATH} \
-                                  SELENIUM_ADDR=selenium \
-                                  SELENIUM_PORT=4444 \
-                                  TEST_QA=1 \
-                                  prove -j ${KOHA_PROVE_CPUS} \
-                                  --rules='par=t/db_dependent/00-strict.t' \
-                                  --rules='seq=t/db_dependent/**.t' --rules='par=**' \
-                                  --timer --harness=TAP::Harness::JUnit -s -r t/ xt/ \
-                                  && touch testing.success; \
-                                  mkdir cover_db; cp -r /cover_db/* cover_db;
-                                  cover -report clover"
-
-    elif [ "$LIGHT_TEST_SUITE" = "1" ]; then
-        koha-shell ${KOHA_INSTANCE} -c "find t xt -name '*.t' \
-                                    -not -path \"t/db_dependent/www/*\" \
-                                    -not -path \"t/db_dependent/selenium/*\" \
-                                    -not -path \"t/db_dependent/Koha/SearchEngine/Elasticsearch/*\" \
-                                    -not -path \"t/db_dependent/Koha/SearchEngine/*\" \
-                                |
-                                  JUNIT_OUTPUT_FILE=junit_main.xml \
-                                  KOHA_TESTING=1 \
-                                  KOHA_NO_TABLE_LOCKS=1 \
-                                  KOHA_INTRANET_URL=http://koha:8081 \
-                                  KOHA_OPAC_URL=http://koha:8080 \
-                                  KOHA_USER=${KOHA_USER} \
-                                  KOHA_PASS=${KOHA_PASS} \
-                                  NODE_PATH=${NODE_PATH} \
-                                  PATH=${PATH} \
-                                  TEST_QA=1 \
-                                  xargs prove -j ${KOHA_PROVE_CPUS} \
-                                  --rules='par=t/db_dependent/00-strict.t' \
-                                  --rules='seq=t/db_dependent/**.t' --rules='par=**' \
-                                  --timer --harness=TAP::Harness::JUnit -r -s \
-                                  && touch testing.success"
-
-    elif [ "$LIGHT_TEST_SUITE" = "2" ]; then # test elastic-search only
-        koha-shell ${KOHA_INSTANCE} -c "
-                                  JUNIT_OUTPUT_FILE=junit_main.xml \
-                                  KOHA_TESTING=1 \
-                                  KOHA_NO_TABLE_LOCKS=1 \
-                                  KOHA_INTRANET_URL=http://koha:8081 \
-                                  KOHA_OPAC_URL=http://koha:8080 \
-                                  KOHA_USER=${KOHA_USER} \
-                                  KOHA_PASS=${KOHA_PASS} \
-                                  NODE_PATH=${NODE_PATH} \
-                                  PATH=${PATH} \
-                                  TEST_QA=1 \
-                                  prove -v --timer --harness=TAP::Harness::JUnit -r \
-                                    t/Koha/Config.t \
-                                    t/Koha/SearchEngine \
-                                    t/db_dependent/Biblio.t \
-                                    t/db_dependent/Search.t \
-                                    t/db_dependent/Koha/Authorities.t \
-                                    t/db_dependent/Koha/Z3950Responder/GenericSession.t \
-                                    t/db_dependent/Koha/SearchEngine \
-                                    t/db_dependent/Koha_Elasticsearch.t \
-                                    t/db_dependent/SuggestionEngine_ExplodedTerms.t \
-                                    t/SuggestionEngine.t \
-                                    t/SuggestionEngine_AuthorityFile.t \
-                                    t/Koha_SearchEngine_Elasticsearch_Browse.t \
-                                  && touch testing.success"
-    else
-        koha-mysql ${KOHA_INSTANCE} -e "DROP DATABASE koha_${KOHA_INSTANCE};"
-        mysql -h db -u koha_${KOHA_INSTANCE} -ppassword -e"CREATE DATABASE koha_${KOHA_INSTANCE};"
-
-        # restart_all
-        echo flush_all > /dev/tcp/memcached/11211
-
-        sudo service apache2 restart
-        sudo service koha-common restart
-
-        koha-shell ${KOHA_INSTANCE} -c "
-                                  JUNIT_OUTPUT_FILE=junit_main.xml \
-                                  KOHA_TESTING=1 \
-                                  KOHA_NO_TABLE_LOCKS=1 \
-                                  KOHA_INTRANET_URL=http://koha:8081 \
-                                  KOHA_OPAC_URL=http://koha:8080 \
-                                  KOHA_USER=${KOHA_USER} \
-                                  KOHA_PASS=${KOHA_PASS} \
-                                  NODE_PATH=${NODE_PATH} \
-                                  PATH=${PATH} \
-                                  SELENIUM_ADDR=selenium \
-                                  SELENIUM_PORT=4444 \
-                                  TEST_QA=1 \
-                                  prove -v t/db_dependent/selenium/00-onboarding.t"
-
-        koha-mysql ${KOHA_INSTANCE} -e "DROP DATABASE koha_${KOHA_INSTANCE};"
-        mysql -h db -u koha_${KOHA_INSTANCE} -ppassword -e"CREATE DATABASE koha_${KOHA_INSTANCE};"
-
-        # restart_all
-        echo flush_all > /dev/tcp/memcached/11211
-        sudo service apache2 restart
-        sudo service koha-common restart
-
-
-        if [ "$LIGHT_TEST_SUITE" = "3" ]; then # selenium tests only
-            koha-shell ${KOHA_INSTANCE} -c "find t/db_dependent/selenium -name '*.t' \
-                                    -not -name '00-onboarding.t' | sort  \
-                                |
-                                  JUNIT_OUTPUT_FILE=junit_main.xml \
-                                  KOHA_TESTING=1 \
-                                  KOHA_NO_TABLE_LOCKS=1 \
-                                  KOHA_INTRANET_URL=http://koha:8081 \
-                                  KOHA_OPAC_URL=http://koha:8080 \
-                                  KOHA_USER=${KOHA_USER} \
-                                  KOHA_PASS=${KOHA_PASS} \
-                                  NODE_PATH=${NODE_PATH} \
-                                  PATH=${PATH} \
-                                  SELENIUM_ADDR=selenium \
-                                  SELENIUM_PORT=4444 \
-                                  TEST_QA=1 \
-                                  xargs prove --timer --harness=TAP::Harness::JUnit -r -v \
-                                  && touch testing.success"
-
-        else
-            koha-shell ${KOHA_INSTANCE} -c "{ ( find t/db_dependent/selenium -name '*.t' -not -name '00-onboarding.t' | sort ) ; ( find t xt -name '*.t' -not -path \"t/db_dependent/selenium/*\" | shuf ) } \
-                                |
-                                  JUNIT_OUTPUT_FILE=junit_main.xml \
-                                  KOHA_TESTING=1 \
-                                  KOHA_NO_TABLE_LOCKS=1 \
-                                  KOHA_INTRANET_URL=http://koha:8081 \
-                                  KOHA_OPAC_URL=http://koha:8080 \
-                                  KOHA_USER=${KOHA_USER} \
-                                  KOHA_PASS=${KOHA_PASS} \
-                                  NODE_PATH=${NODE_PATH} \
-                                  PATH=${PATH} \
-                                  SELENIUM_ADDR=selenium \
-                                  SELENIUM_PORT=4444 \
-                                  TEST_QA=1 \
-                                  xargs prove -j ${KOHA_PROVE_CPUS} \
-                                  --rules='par=t/db_dependent/00-strict.t' \
-                                  --rules='seq=t/db_dependent/**.t' \
-                                  --timer --harness=TAP::Harness::JUnit -r \
-                                  && touch testing.success"
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-all-tests --with-coverage
+    elif [ "$TEST_SUITE" = "light" ]; then
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-light-test-suite
+    elif [ "$TEST_SUITE" = "es-only" ]; then
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-elastic-tests-only
+    elif [ "$TEST_SUITE" = "selenium-only" ]; then
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-selenium-tests-only
+    elif [ "$TEST_SUITE" = "all-perl-tests" ]; then
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-all-perl-tests
+    elif [ "$TEST_SUITE" = "db-compare-only" ]; then
+        if [ -z ${DB_COMPARE_WITH} ]; then
+            echo "ERROR: \$TEST_SUITE=db-compare-only requires \$DB_COMPARE_WITH set"
+            exit 2
         fi
-
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-db-compare-only --compare-with "${DB_COMPARE_WITH}"
+    elif [ "$TEST_SUITE" = "specific-tests" ]; then
+        if [ -z ${TESTS_TO_RUN} ]; then
+            echo "ERROR: \$TEST_SUITE=specific-tests requires \$TESTS_TO_RUN set"
+            exit 2
+        fi
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-only "${TESTS_TO_RUN}"
+    else
+        perl ${BUILD_DIR}/misc4dev/run_tests.pl --koha-dir=${BUILD_DIR}/koha --run-all-tests
     fi
+
 else
 
-# Change ownership of the .config dir of the instance user.
-# It's owned by root due to the neovim setup in the Dockerfile, but not
-# every image installs neovim — only chown if the dir exists.
-if [ -d "/var/lib/koha/${KOHA_INSTANCE}/.config" ]; then
-    chown -R "${KOHA_INSTANCE}-koha": "/var/lib/koha/${KOHA_INSTANCE}/.config"
-fi
+    # LMSCloud: chown the neovim config dir baked into the image so the
+    # instance user can read/write it. Path is hardcoded to /var/lib/koha/kohadev/.config
+    # by the Dockerfile; guard so non-default KOHA_INSTANCE values don't fail.
+    if [ -d /var/lib/koha/kohadev/.config ]; then
+        chown -R "${KOHA_INSTANCE}-koha": /var/lib/koha/kohadev/.config
+    fi
 
-# start koha-reload-starman, if we have inotify installed
-#    if [ -f "/usr/bin/inotifywait" ]; then
-#        daemon  --verbose=1 \
-#            --name=reload-starman \
-#            --respawn \
-#            --delay=15 \
-#            --pidfiles=/var/run/koha/kohadev/ -- /kohadevbox/koha-reload-starman
-#    fi
+    # start koha-reload-starman, if we have inotify installed
+    #    if [ -f "/usr/bin/inotifywait" ]; then
+    #        daemon  --verbose=1 \
+    #            --name=reload-starman \
+    #            --respawn \
+    #            --delay=15 \
+    #            --pidfiles=/var/run/koha/kohadev/ -- /kohadevbox/koha-reload-starman
+    #    fi
 
     # TODO: We could use supervise as the main loop
     /bin/bash -c "trap : TERM INT; sleep infinity & wait"

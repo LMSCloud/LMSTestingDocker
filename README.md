@@ -77,9 +77,40 @@ SKIP_DATA_INIT=yes \
 docker compose -f docker-compose-lmscloud.yml up
 ```
 
-The compose overlay mounts `${LMSC_SYNC_REPO}` at `/kohadevbox/koha` and
-overlays our patched `run.sh`. Supported environment variables: `SKIP_DATA_INIT`,
-`EXTRA_APT`, `EXTRA_CPAN`.
+The compose overlay mounts `${LMSC_SYNC_REPO}` at `/kohadevbox/koha`. The
+patched `run.sh` is baked into the image at build time.
+
+`${LMSC_SYNC_REPO}` may be a Git worktree; `run.sh` detects
+`GIT_WORKTREE_SOURCE` and adds the main-checkout root to `safe.directory`
+so git ops as the instance user don't trip on dubious-ownership.
+
+`ktd --wait-ready N` works against this image — `run.sh` writes
+`/ktd_ready` once init completes.
+
+### Runtime environment variables
+
+LMSCloud-specific:
+
+| Variable | Effect |
+|---|---|
+| `SKIP_DATA_INIT=yes` | Skip `do_all_you_can_do.pl` (DB schema + seed data). Populate manually after boot. |
+
+Carried over from upstream KTD's `run.sh`:
+
+| Variable | Effect |
+|---|---|
+| `EXTRA_APT` | apt packages to install before any Koha code runs |
+| `EXTRA_CPAN` | CPAN modules to install before any Koha code runs |
+| `CPAN=yes` | Install latest versions of installed CPAN deps via `cpan-outdated` |
+| `INSTALL_MISSING_FROM_CPANFILE=yes` | `cpanm --installdeps ${BUILD_DIR}/koha/` at boot (slow — prefer baking deps into the image) |
+| `USE_EXISTING_DB=yes` | Pass `--use-existing-db` to `do_all_you_can_do.pl` |
+| `SKIP_L10N=yes` | Skip auto-clone/fetch of `koha-l10n` into `misc/translator/po` |
+| `SKIP_CYPRESS_CHOWN=yes` | Skip recursive chown of `/kohadevbox/Cypress` after UID remap |
+| `ENABLE_PLUGINS=yes` | Wire `${BUILD_DIR}/plugins/*` entries into `koha-conf.xml` |
+| `RUN_TESTS_AND_EXIT=yes` + `TEST_SUITE=…` | Run a named suite (`light`, `es-only`, `selenium-only`, `all-perl-tests`, `db-compare-only`, `specific-tests`) via `misc4dev/run_tests.pl` and exit |
+| `DEBUG_RUN=yes` + `DEBUG_RUN_URL` | wget a remote `run.sh` and exec it instead — iterate without rebuilding the image |
+| `DEBUG_GIT_REPO_MISC4DEV=yes` (+ `_URL` + `_BRANCH`) | Re-clone `misc4dev` from the given branch |
+| `DEBUG_GIT_REPO_QATESTTOOLS=yes` (+ `_URL` + `_BRANCH`) | Re-clone `qa-test-tools` |
 
 ## Legacy 22.11 branch
 
