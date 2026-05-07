@@ -168,6 +168,13 @@ if [ -n "${EXTRA_CPAN}" ]; then
     cpanm --skip-installed ${EXTRA_CPAN}
 fi
 
+# LMSCloud: update node dependencies before any build runs
+if [ -f "${BUILD_DIR}/koha/package.json" ]; then
+    echo "Running yarn install to update node dependencies..."
+    cd ${BUILD_DIR}/koha && yarn install --frozen-lockfile 2>/dev/null || yarn install || true
+    cd ${BUILD_DIR}
+fi
+
 sed -i '/Koha::SearchEngine::Elasticsearch->reset_elasticsearch_mappings;/d' ${BUILD_DIR}/misc4dev/populate_db.pl
 
 perl ${BUILD_DIR}/misc4dev/do_all_you_can_do.pl \
