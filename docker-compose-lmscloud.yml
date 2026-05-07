@@ -4,3 +4,21 @@ services:
     image: ${KOHA_IMAGE} # e.g. KOHA_IMAGE=ghcr.io/lmscloudpauld/lmscloud-koha-{aarch64,x86_64}:latest docker compose ...
     volumes:
       - ${LMSC_SYNC_REPO}:/kohadevbox/koha
+      - ./dists/lmscloud/files/run.sh:/kohadevbox/run.sh
+    environment:
+      # New upstream deps not in 22.11 image — remove after 24.11 image is built
+      - EXTRA_CPAN=Struct::Diff Algorithm::Munkres
+  es:
+    image: koha/elasticsearch-icu:7.x-arm64
+    environment:
+      - cluster.name=docker-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    networks:
+      - kohanet
