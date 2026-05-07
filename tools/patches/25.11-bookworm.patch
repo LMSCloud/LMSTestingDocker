@@ -1,6 +1,6 @@
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -51,19 +51,33 @@
+@@ -51,19 +51,32 @@
      echo "deb [signed-by=/etc/apt/trusted.gpg.d/koha.gpg] https://debian.koha-community.org/koha 25.11 main" >> /etc/apt/sources.list.d/koha.list && \
      echo "deb [signed-by=/etc/apt/trusted.gpg.d/koha.gpg] https://debian.koha-community.org/koha-testing 25.11 main" >> /etc/apt/sources.list.d/koha.list
  
@@ -10,11 +10,10 @@
 +# every image layer — only the installed files land in this RUN's layer.
 +RUN --mount=type=bind,source=koha-common.deb,target=/tmp/koha-common.deb \
 +       apt-get -y update \
-+    && (dpkg -i /tmp/koha-common.deb || apt-get -y -f install --no-install-recommends -o Dpkg::Options::=--force-overwrite) \
++    && (dpkg -i /tmp/koha-common.deb || apt-get -y -f install --no-install-recommends) \
 +    && /etc/init.d/koha-common stop \
 +    && rm -rf /var/cache/apt/archives/* \
-+    && rm -rf /var/lib/apt/lists/* \
-+    && rm -rf /usr/share/koha/misc/translator/po/*
++    && rm -rf /var/lib/apt/lists/*
 +
 +# LMSCloud: install deps missing from upstream koha-common (audited vs cpanfile)
  RUN apt-get -y update \
