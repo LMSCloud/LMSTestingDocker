@@ -1,0 +1,31 @@
+# Local override: makes a git *worktree* usable as LMSC_SYNC_REPO.
+#
+# A linked worktree's .git is a FILE containing e.g.
+#   gitdir: /Users/you/Projects/lmsc/Koha-LMSCloud/.git/worktrees/<name>
+# i.e. an absolute HOST path into the main checkout. Only the worktree dir is
+# mounted at /kohadevbox/koha, so that path is missing inside the container and
+# every git op dies with "not a git repository" -> koha exits 128.
+#
+# Fix: bind-mount the main checkout's .git at its IDENTICAL host path so the
+# gitdir reference (and its commondir) resolve inside the container. With
+# LOCAL_USER_ID matching the host owner, git ownership checks pass without any
+# extra safe.directory config.
+#
+# NOTE: node_modules is NOT handled here. The worktree branch's build tooling
+# (rspack etc.) needs linux-arm64 native bindings; install them into the
+# worktree with a linux yarn container BEFORE starting the stack, otherwise the
+# macOS bindings break the boot-time asset build.
+#
+# Set LMSC_GIT_COMMONDIR to the *main* checkout's .git, then layer this AFTER
+# the lmscloud overlay:
+#
+#   export LMSC_SYNC_REPO=/Users/you/Projects/lmsc/koha-lmscloud-worktree
+#   export LMSC_GIT_COMMONDIR=/Users/you/Projects/lmsc/Koha-LMSCloud/.git
+#   ktd --name lmscloud \
+#     -f docker-compose-lmscloud.yml \
+#     -f docker-compose.worktree.yml \
+#     up
+services:
+  koha:
+    volumes:
+      - ${LMSC_GIT_COMMONDIR}:${LMSC_GIT_COMMONDIR}

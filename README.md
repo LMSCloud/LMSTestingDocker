@@ -10,10 +10,12 @@ instead and injects it into a KTD-style image.
 ## Layout
 
 ```
-tools/                      Build pipeline
-dists/lmscloud/files/run.sh KTD entrypoint with LMS-specific hooks
-docker-compose-lmscloud.yml Compose overlay for dev use
-out/debian/                 .deb build output (git-ignored)
+tools/                        Build pipeline
+tools/install-node-modules.sh Install node_modules via a Linux Node container
+dists/lmscloud/files/run.sh   KTD entrypoint with LMS-specific hooks
+docker-compose-lmscloud.yml   Compose overlay for dev use
+docker-compose.worktree.yml   Compose overlay: use a git worktree as sync repo
+out/debian/                   .deb build output (git-ignored)
 ```
 
 ## Requirements
@@ -111,6 +113,36 @@ Carried over from upstream KTD's `run.sh`:
 | `DEBUG_RUN=yes` + `DEBUG_RUN_URL` | wget a remote `run.sh` and exec it instead — iterate without rebuilding the image |
 | `DEBUG_GIT_REPO_MISC4DEV=yes` (+ `_URL` + `_BRANCH`) | Re-clone `misc4dev` from the given branch |
 | `DEBUG_GIT_REPO_QATESTTOOLS=yes` (+ `_URL` + `_BRANCH`) | Re-clone `qa-test-tools` |
+
+## Using a git worktree as the sync repo
+
+`LMSC_SYNC_REPO` can point at a linked git *worktree*, but two macOS-specific
+snags will otherwise stop the stack from booting:
+
+1. **`fatal: not a git repository` → koha exits 128.** A worktree's `.git` is a
+   file pointing at the main checkout's gitdir by absolute host path, which
+   isn't mounted into the container. Layer in `docker-compose.worktree.yml`,
+   which bind-mounts the main checkout's `.git` at its identical host path:
+
+   ```bash
+   export LMSC_SYNC_REPO=/path/to/koha-lmscloud-worktree
+   export LMSC_GIT_COMMONDIR=/path/to/Koha-LMSCloud/.git   # the MAIN checkout's .git
+   ktd --name lmscloud \
+     -f docker-compose-lmscloud.yml \
+     -f docker-compose.worktree.yml \
+     up
+   ```
+
+2. **Asset build fails (`@rspack/binding-linux-*` missing / `rspack: not
+   found`).** A `node_modules` installed on macOS carries the wrong native
+   bindings. Install them in a Linux Node container first:
+
+   ```bash
+   ./tools/install-node-modules.sh --repo /path/to/koha-lmscloud-worktree
+   ```
+
+   (Defaults to `$LMSC_SYNC_REPO` and Node 18 — see `--help`.) Run this once
+   before starting the stack, or whenever the branch's JS dependencies change.
 
 ## Legacy 22.11 branch
 
