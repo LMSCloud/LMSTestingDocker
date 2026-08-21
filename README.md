@@ -62,6 +62,33 @@ The default `<registry>` is `ghcr.io/lmscloudpauld` (the namespace this
 repo's pipeline currently publishes to). Override with `LMS_REGISTRY` (or
 `--registry` on `build-ktd-image.sh`) when forking or pushing elsewhere.
 
+### Provenance and rollback
+
+The version tag is rolling — every rebuild of the same Koha version overwrites
+it. Alongside it, tag each push with the short commit of the Koha-LMSCloud tree
+it was built from:
+
+| Purpose                       | Example                             |
+| ----------------------------- | ----------------------------------- |
+| Rolling, latest build         | `lmscloud-koha-aarch64:25.11.03`    |
+| Immutable, one source commit  | `lmscloud-koha-aarch64:25.11.03-27f28ae` |
+
+```bash
+docker tag <image>:25.11.03 <image>:25.11.03-$(git -C "${LMSC_SYNC_REPO}" rev-parse --short HEAD)
+```
+
+The commit suffix, not a date stamp: the same Koha version gets rebuilt from
+different trees, so "which tree is inside this image" is the question a tag
+needs to answer, and a build date does not answer it.
+
+For reproducible deployments pin the digest rather than any tag — it survives
+someone else overwriting the rolling tag:
+
+```bash
+docker buildx imagetools inspect <image>:25.11.03   # prints Digest: sha256:...
+KOHA_IMAGE=<image>@sha256:<digest> docker compose -f docker-compose-lmscloud.yml up
+```
+
 ## KTD branch → Debian dist
 
 | KTD branch                         | Debian dist |

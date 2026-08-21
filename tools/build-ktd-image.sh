@@ -168,6 +168,14 @@ if [[ "${KOHA_PACKAGE}" != koha-common_${KOHA_VERSION}-*.deb ]]; then
 fi
 echo "Using package: ${KOHA_PACKAGE}"
 
+# The exact Debian version string of the .deb we are about to bake in. Passed to
+# the Dockerfile as KOHA_DEB_VERSION so the install step can pin to it and assert
+# that it is what actually ended up installed — apt will otherwise happily
+# replace it with the community repo's newer koha-common.
+KOHA_DEB_VERSION="${KOHA_PACKAGE#koha-common_}"
+KOHA_DEB_VERSION="${KOHA_DEB_VERSION%_all.deb}"
+echo "Deb version: ${KOHA_DEB_VERSION}"
+
 # Use a persistent cache of the upstream KTD clone per branch under
 # .cache/ktd/<branch> in the project root. On first run, clone fresh.
 # On subsequent runs, fetch + reset to upstream HEAD. If the network
@@ -288,6 +296,7 @@ if [[ -n "${PUSH}" ]]; then
     echo "Building and pushing multi-platform image..."
     docker buildx build \
         --platform "${PLATFORMS}" \
+        --build-arg "KOHA_DEB_VERSION=${KOHA_DEB_VERSION}" \
         --tag "${IMAGE_NAME}" \
         ${PUSH} \
         "${BUILD_CONTEXT}"
@@ -298,6 +307,7 @@ else
     echo "Building for platform: ${first_platform}"
     docker buildx build \
         --platform "${first_platform}" \
+        --build-arg "KOHA_DEB_VERSION=${KOHA_DEB_VERSION}" \
         --tag "${IMAGE_NAME}" \
         --load \
         "${BUILD_CONTEXT}"

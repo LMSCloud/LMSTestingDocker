@@ -1,6 +1,6 @@
 --- a/Dockerfile
 +++ b/Dockerfile
-@@ -51,19 +51,32 @@
+@@ -51,19 +51,55 @@
      echo "deb [signed-by=/etc/apt/trusted.gpg.d/koha.gpg] https://debian.koha-community.org/koha 25.11 main" >> /etc/apt/sources.list.d/koha.list && \
      echo "deb [signed-by=/etc/apt/trusted.gpg.d/koha.gpg] https://debian.koha-community.org/koha-testing 25.11 main" >> /etc/apt/sources.list.d/koha.list
  
@@ -8,14 +8,33 @@
 +# Install koha-common from locally-built .deb (bind-mounted by build-ktd-image.sh
 +# as koha-common.deb in the build context). Bind-mount keeps the .deb out of
 +# every image layer — only the installed files land in this RUN's layer.
++#
++# `apt-get install <path>` — never `dpkg -i` — because dpkg cannot resolve this
++# package's ~470 Depends. It leaves koha-common unpacked-but-unconfigured, and an
++# `apt-get -f install` fallback then "corrects dependencies" by pulling the
++# community repo's koha-common straight over our build (25.11.07-1 sorts above
++# 25.11.03lmscloud-1), so the image silently ships community Koha. The pin makes
++# our exact version the only candidate, the grep asserts what actually landed,
++# and the hold keeps later apt runs (EXTRA_APT, run.sh) off it.
++ARG KOHA_DEB_VERSION
 +RUN --mount=type=bind,source=koha-common.deb,target=/tmp/koha-common.deb \
-+       apt-get -y update \
-+    && (dpkg -i /tmp/koha-common.deb || apt-get -y -f install --no-install-recommends) \
++       test -n "${KOHA_DEB_VERSION}" \
++    && printf 'Package: koha-common\nPin: version %s\nPin-Priority: 1001\n' \
++         "${KOHA_DEB_VERSION}" > /etc/apt/preferences.d/99-lmscloud-koha-common \
++    && apt-get -y update \
++    && apt-get -y install --no-install-recommends /tmp/koha-common.deb \
++    && dpkg -s koha-common | sed -n 's/^Version: //p' | grep -qx "${KOHA_DEB_VERSION}" \
++    && apt-mark hold koha-common \
 +    && /etc/init.d/koha-common stop \
 +    && rm -rf /var/cache/apt/archives/* \
-+    && rm -rf /var/lib/apt/lists/*
++    && rm -rf /var/lib/apt/lists/* \
++    || { echo "ERROR: koha-common ${KOHA_DEB_VERSION} did not install cleanly (see above)" >&2; exit 1; }
 +
-+# LMSCloud: install deps missing from upstream koha-common (audited vs cpanfile)
++# LMSCloud: install deps missing from our koha-common (audited vs cpanfile and
++# vs every module the tree `use`s). The last three back xt/perltidy.t,
++# xt/author/pod_coverage.t and xt/find-missing-new-lines-at-the-end-of-file.t:
++# neither debian/control nor cpanfile declares them, and unlike the community
++# repo's koha-common our .deb does not pull them in.
  RUN apt-get -y update \
 -   && apt-cache policy koha-common \
 -   && apt-cache policy libmojolicious-perl \
@@ -30,6 +49,7 @@
 -   && rm -rf /usr/share/koha/misc/translator/po/* # Do not embed PO files
 +    && apt-get -y install --no-install-recommends \
 +         libcgi-session-serialize-yaml-perl \
++         libcpanel-json-xs-perl \
 +         libmarc-lint-perl \
 +         libtest-nowarnings-perl \
 +         libsoap-lite-perl \
@@ -40,6 +60,9 @@
 +         libtest-pod-perl \
 +         graphicsmagick \
 +         fonts-liberation \
++         libgit-wrapper-perl \
++         libpod-coverage-perl \
++         libtest-perltidy-perl \
 +    && rm -rf /var/cache/apt/archives/* \
 +    && rm -rf /var/lib/apt/lists/*
  
